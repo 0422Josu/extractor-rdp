@@ -1,0 +1,5 @@
+streamlit==1.29.0
+pandas
+python-docx
+openpyxl
+plotly==5.18.0
