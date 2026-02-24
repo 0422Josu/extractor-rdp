@@ -37,6 +37,7 @@ def limpiar_valor(texto):
     return texto.replace('\n', ' ').strip().replace(',', '')
 
 def formatear_numero(valor_str):
+    if not valor_str: return "0"
     valor_str = valor_str.upper()
     numero_match = re.search(r'([0-9.]+)', valor_str)
     if not numero_match: return "0"
@@ -44,6 +45,11 @@ def formatear_numero(valor_str):
     if "KV" in valor_str: numero = int(numero * 1000)
     else: numero = int(numero)
     return str(numero)
+
+def contiene(texto, palabra):
+    """Búsqueda flexible (ignora mayúsculas/minúsculas)"""
+    if not texto: return False
+    return palabra.lower() in texto.lower()
 
 def extraer_datos_archivo(doc_file, nombre_archivo):
     info = {"sub": "", "bay": "", "rel": "", "mar": "", "fec": "", "ord": "", "ser": "", "val_i": "", "val_v": "", "rechazo": "", "tc": "", "tv": "", "archivo": nombre_archivo}
@@ -57,25 +63,35 @@ def extraer_datos_archivo(doc_file, nombre_archivo):
                 texto_fila = " ".join(celdas)
                 texto_completo += texto_fila + " "
                 for i, texto_celda in enumerate(celdas):
-                    if "Substation:" == texto_celda and i + 1 < len(celdas): info["sub"] = limpiar_valor(celdas[i+1])
-                    elif "Bay:" == texto_celda and i + 1 < len(celdas): info["bay"] = limpiar_valor(celdas[i+1])
-                    elif "Name/description:" == texto_celda and i + 1 < len(celdas): info["rel"] = limpiar_valor(celdas[i+1])
-                    elif "Manufacturer:" == texto_celda and i + 1 < len(celdas): info["mar"] = limpiar_valor(celdas[i+1])
-                    elif "Serial/model number:" == texto_celda and i + 1 < len(celdas): info["ser"] = limpiar_valor(celdas[i+1])
-                    elif "Additional info 1:" == texto_celda and i + 1 < len(celdas): info["ord"] = limpiar_valor(celdas[i+1])
-                    if "V nom (secondary):" in texto_celda and i + 1 < len(celdas): v_sec = formatear_numero(celdas[i+1])
-                    if "V primary:" in texto_celda and i + 1 < len(celdas): v_prim = formatear_numero(celdas[i+1])
-                    if "I nom (secondary):" in texto_celda and i + 1 < len(celdas): i_sec = formatear_numero(celdas[i+1])
-                    if "I primary:" in texto_celda and i + 1 < len(celdas): i_prim = formatear_numero(celdas[i+1])
+                    if contiene(texto_celda, "Substation:") and i + 1 < len(celdas): info["sub"] = limpiar_valor(celdas[i+1])
+                    elif contiene(texto_celda, "Bay:") and i + 1 < len(celdas): info["bay"] = limpiar_valor(celdas[i+1])
+                    elif contiene(texto_celda, "Name/description:") and i + 1 < len(celdas): info["rel"] = limpiar_valor(celdas[i+1])
+                    elif contiene(texto_celda, "Manufacturer:") and i + 1 < len(celdas): info["mar"] = limpiar_valor(celdas[i+1])
+                    elif contiene(texto_celda, "Serial/model number:") and i + 1 < len(celdas): info["ser"] = limpiar_valor(celdas[i+1])
+                    elif contiene(texto_celda, "Additional info 1:") and i + 1 < len(celdas): info["ord"] = limpiar_valor(celdas[i+1])
+                    
+                    # Búsqueda flexible para valores nominales TC/TV
+                    if contiene(texto_celda, "V nom (secondary)") and i + 1 < len(celdas): v_sec = formatear_numero(celdas[i+1])
+                    if contiene(texto_celda, "V primary") and i + 1 < len(celdas): v_prim = formatear_numero(celdas[i+1])
+                    if contiene(texto_celda, "I nom (secondary)") and i + 1 < len(celdas): i_sec = formatear_numero(celdas[i+1])
+                    if contiene(texto_celda, "I primary") and i + 1 < len(celdas): i_prim = formatear_numero(celdas[i+1])
+        
         if v_prim and v_sec: info["tv"] = f"{v_prim}/{v_sec}"
         if i_prim and i_sec: info["tc"] = f"{i_prim}/{i_sec}"
+        
         if "RECHAZO DE CARGA" in texto_completo.upper(): info["rechazo"] = "SI"
+        
         f_m = re.search(r'(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})', texto_completo)
         info["fec"] = f_m.group(1).replace('.', '/') if f_m else ""
+        
+        # Valores de prueba (corriente)
         i_m = re.findall(r'I\s*L\d\s*[|]?\s*([1-9]\d*\.?\d*)\s*A', texto_completo, re.I)
         if i_m: info["val_i"] = i_m[0]
+        
+        # Valores de prueba (voltaje)
         v_m = re.findall(r'V\s*L\d-?E?\s*[|]?\s*([1-9]\d*\.?\d*)\s*V', texto_completo, re.I)
         if v_m: info["val_v"] = v_m[0]
+        
     except Exception as e: st.error(f"Error: {str(e)}")
     return info
 
@@ -93,14 +109,14 @@ def buscar_archivos_en_zip(zip_file):
 st.markdown('<div class="header-container"><div class="header-title">⚡ Extractor RDP Pro v5.2</div><div class="header-subtitle">🏭 Sistema Industrial de Extracción de Protocolos TC/TV</div></div>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown('<div class="sidebar-content"><h3>📋 Instrucciones</h3><p>1️⃣ Comprime tu carpeta en .ZIP<br>2️⃣ Sube el ZIP<br>3️⃣ Procesa automáticamente<br>4️⃣ Descarga Excel</p><hr><h4>📊 Campos</h4><ul><li>🏢 Subestación</li><li>⚡ Bahía</li><li>🔌 Relé</li><li>🏷️ Marca</li><li>🔢 Serie</li></ul></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-content"><h3>📋 Instrucciones</h3><p>1️⃣ Comprime tu carpeta en .ZIP<br>2️⃣ Sube el ZIP<br>3️⃣ Procesa automáticamente<br>4️⃣ Descarga Excel</p><hr><h4>📊 Campos</h4><ul><li>🏢 Subestación</li><li>⚡ Bahía</li><li>🔌 Relé</li><li>🏷️ Marca</li><li>🔢 Serie</li><li>🔄 Relación TC</li><li>📈 Relación TV</li><li>💉 Valores de Prueba</li></ul></div>', unsafe_allow_html=True)
     st.markdown("---")
     st.success("🟢 Sistema Activo")
     st.info(f"🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
 col1, col2 = st.columns([3, 1])
 with col1:
-    st.markdown('<div class="upload-zone"><div class="big-icon">📦</div><h3 style="color:#1e3c72">Sube tu archivo ZIP</h3><p>El sistema recorrerá todas las subcarpetas</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="upload-zone"><div class="big-icon">📦</div><h3 style="color:#1e3c72">Sube tu archivo ZIP</h3><p>El sistema recorrerá todas las subcarpetas automáticamente</p></div>', unsafe_allow_html=True)
     zip_file = st.file_uploader("", type="zip", label_visibility="collapsed")
 with col2:
     st.info("**Formato:** .ZIP\n\n**Procesa:**\n- Todo automático")
@@ -130,7 +146,7 @@ if procesar_btn:
                         if datos["sub"]: cont_sub.add(datos["sub"])
                         if datos["bay"]: cont_bay.add(datos["bay"])
                         if datos["mar"]: cont_mar.add(datos["mar"])
-                except: pass
+                except Exception as e: st.warning(f"⚠️ Error en {arc['nombre']}: {str(e)}")
                 progreso.progress((idx + 1) / total)
             if registros:
                 st.markdown("---")
